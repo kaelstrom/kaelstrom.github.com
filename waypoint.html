@@ -1,4 +1,7 @@
 <!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+
+<link href="prettify.css" type="text/css" rel="stylesheet" />
+<script type="text/javascript" src="prettify.js"></script>
 <html>
 	<head>
 		<title>Tactical Waypoint Generator</title>
@@ -21,11 +24,11 @@
 			border: 1px solid #000000;
 		}
 		span {
-			font-size: 24pt;
+			font-size: 12pt;
 		}
 		</style>
 	</head>
-	<body>
+	<body onload="prettyPrint()">
 		<center>
 			<div id="container">
 				<center>
@@ -36,5 +39,555 @@
 				</center>
 			</div>
 		</center>
+		
+		GameFrame.java
+		<pre class="prettyprint">
+package waypointgen;
+
+import java.awt.BorderLayout;
+import java.awt.Graphics;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+
+import javax.swing.JApplet;
+import javax.swing.Timer;
+
+
+public class GameFrame extends JApplet implements ActionListener {
+	private static final long serialVersionUID = 4537642510837391731L;
+	private Game game;
+	private View view;
+	private Timer timer;
+	private int speed;
+	private int pause;
+	
+	public void init() {
+		game = new Game(800,800,40,10,400);
+		view = new View(game);
+		speed = 10;
+		pause = 0;
+        getContentPane().add(BorderLayout.CENTER,view);
+        //pack();
+        //Dimension screen=Toolkit.getDefaultToolkit().getScreenSize();
+        //this.setLocation((int)(screen.getWidth()*1/8),(int)(screen.getHeight()*1/8));            
+        //this.setVisible(true);
+        //this.setResizable(false);
+        //setDefaultCloseOperation(EXIT_ON_CLOSE);
+        //repaint();
+        
+        //Set up timer to drive animation events.
+        timer = new Timer(speed, this);
+        timer.setInitialDelay(pause);
+        timer.start(); 
+	}
+	
+
+    //Handle timer event
+    public void actionPerformed(ActionEvent e) {
+    	game.update();
+    	repaint();
+    }
+	
+	public void paint( Graphics g )
+    {
+        super.paint( g );
+    }
+}
+
+		</pre>
+		
+		Game.java
+		<pre class="prettyprint">
+package waypointgen;
+
+import java.util.ArrayList;
+import java.awt.Polygon;
+import java.util.Random;
+
+public final class Game {
+
+	private ArrayList<Polygon> obstacles;
+	private ArrayList<Waypoint> waypoints;
+	private Waypoint activeWaypoint;
+	private Random randomGen;
+	private int numObstacles;
+	private int xsize;
+	private int ysize;
+	private int gridsize;
+	private int obstacleSize;
+	private int activeIndex;
+
+	private boolean isRunning;
+	
+	public Game(int xsize, int ysize, int gridsize, int numObstacles, int obstacleSize) 
+	{
+		activeIndex = 0;
+		randomGen = new Random();
+		this.setObstacleSize(obstacleSize);
+		this.setNumObstacles(numObstacles);
+		this.setXsize(xsize);
+		this.setYsize(ysize);
+		this.setGridsize(gridsize);
+		this.setRunning(true);
+		setObstacles(new ArrayList<Polygon>());
+		setWaypoints(new ArrayList<Waypoint>());
+		generateObstacles();
+		generateWaypointGrid();
+		this.setActiveWaypoint(waypoints.get(0));
+	}
+
+	public void generateObstacles()
+	{
+		Polygon tmp;
+		int centerx, centery;
+		for(int i = 0; i < numObstacles; i++)
+		{
+			centerx = randomGen.nextInt(xsize);
+			centery = randomGen.nextInt(ysize);
+			tmp = new Polygon();
+			//tmp.addPoint(centerx + randomGen.nextInt(obstacleSize)-obstacleSize/2, centery + randomGen.nextInt(obstacleSize)-obstacleSize/2);
+			tmp.addPoint(centerx + randomGen.nextInt(obstacleSize)-obstacleSize/2, centery + randomGen.nextInt(obstacleSize)-obstacleSize/2);
+			tmp.addPoint(centerx + randomGen.nextInt(obstacleSize)-obstacleSize/2, centery + randomGen.nextInt(obstacleSize)-obstacleSize/2);
+			tmp.addPoint(centerx + randomGen.nextInt(obstacleSize)-obstacleSize/2, centery + randomGen.nextInt(obstacleSize)-obstacleSize/2);
+			obstacles.add(tmp);
+		}
+
+		addObstacle(50,50,100,300);
+		addObstacle(50,450,100,300);
+		addObstacle(650,50,100,300);
+		addObstacle(650,450,100,300);
+	}
+	
+	public void addObstacle(int x, int y, int w, int h)
+	{
+		Polygon tmp = new Polygon();
+		tmp.addPoint(x, y);
+		tmp.addPoint(x+w, y);
+		tmp.addPoint(x+w, y+h);
+		tmp.addPoint(x, y+h);
+		obstacles.add(tmp);
+	}
+	
+	public void generateWaypointGrid()
+	{
+		//places a gridsize * gridsize grid of waypoints
+		for(int x = 0; x <= xsize/gridsize; x++)
+		{
+			for(int y = 0; y <= ysize/gridsize; y++)
+			{
+				waypoints.add(new Waypoint(x, y, gridsize));
+				//((Waypoint) waypoints.toArray()[(waypoints.size()-1)]).setColor(randomGen.nextInt(255),randomGen.nextInt(255),randomGen.nextInt(255));
+			}
+		}
+		
+		//remove obstructed waypoints
+		ArrayList<Waypoint> removal = new ArrayList<Waypoint>();
+		for(Waypoint w : waypoints)
+		{
+			for(Polygon p : obstacles)
+			{
+				if(p.contains(w.getX(), w.getY()))
+					removal.add(w);
+			}
+		}
+		waypoints.removeAll(removal);
+		
+		//links neighboring waypoints
+		for(Waypoint w : waypoints)
+		{
+			for(Waypoint n : waypoints)
+			{
+				if((Math.abs(w.getRX() - n.getRX()) == 1 && Math.abs(w.getRY() - n.getRY()) == 0) ||
+				   (Math.abs(w.getRX() - n.getRX()) == 0 && Math.abs(w.getRY() - n.getRY()) == 1))
+				{
+					w.addNeighbor(n);					
+				}
+			}
+		}
+	}
+	
+	public void update()
+	{
+		if(activeIndex < waypoints.size())
+		{
+			if(activeWaypoint.scan(obstacles))
+			{
+				activeIndex++;	
+				if(activeIndex < waypoints.size())
+				{
+
+					setActiveWaypoint(waypoints.get(activeIndex));
+				}
+			}
+		}
+	}
+	
+	public int getNumObstacles() {
+		return numObstacles;
+	}
+
+	public void setNumObstacles(int numObstacles) {
+		this.numObstacles = numObstacles;
+	}
+
+	public ArrayList<Polygon> getObstacles() {
+		return obstacles;
+	}
+
+	public void setObstacles(ArrayList<Polygon> obstacles) {
+		this.obstacles = obstacles;
+	}
+
+	public ArrayList<Waypoint> getWaypoints() {
+		return waypoints;
+	}
+
+	public void setWaypoints(ArrayList<Waypoint> waypoints) {
+		this.waypoints = waypoints;
+	}
+
+	public Waypoint getActiveWaypoint() {
+		return activeWaypoint;
+	}
+
+	public void setActiveWaypoint(Waypoint activeWaypoint) {
+		this.activeWaypoint = activeWaypoint;
+	}
+	
+	public int getObstacleSize() {
+		return obstacleSize;
+	}
+
+	public void setObstacleSize(int obstacleSize) {
+		this.obstacleSize = obstacleSize;
+	}
+
+	public int getGridsize() {
+		return gridsize;
+	}
+
+	public void setGridsize(int gridsize) {
+		this.gridsize = gridsize;
+	}
+
+	public int getXsize() {
+		return xsize;
+	}
+
+	public void setXsize(int xsize) {
+		this.xsize = xsize;
+	}
+
+	public int getYsize() {
+		return ysize;
+	}
+
+	public void setYsize(int ysize) {
+		this.ysize = ysize;
+	}
+
+	public boolean isRunning() {
+		return isRunning;
+	}
+
+	public void setRunning(boolean isRunning) {
+		this.isRunning = isRunning;
+	}
+}
+
+		</pre>
+		
+		
+		Waypoint.java
+		<pre class="prettyprint">
+package waypointgen;
+
+import java.awt.Color;
+import java.awt.Polygon;
+import java.util.ArrayList;
+
+public class Waypoint {
+	private int x;
+	private int y;
+	private int rx;
+	private int ry;
+	private int angle;
+	private double rad;
+	private int centerx;
+	private int centery;
+	private double cover;
+	private Color color;
+	private Color colliderColor;
+	private ArrayList<Waypoint> neighbors;
+	private Polygon collider;
+	private Polygon colliderStart;
+	
+	public Waypoint(int x, int y, int gridsize)
+	{
+		this.setColliderColor(Color.blue);
+		this.setCover(0);
+		this.setX(x * gridsize);
+		this.setY(y * gridsize);
+		this.setRX(x);
+		this.setRY(y);
+		this.setColor(Color.gray);
+		angle = 0;
+		setNeighbors(new ArrayList<Waypoint>());
+		makeCollider();
+	}
+	
+	private void makeCollider()
+	{
+		collider = new Polygon();
+		collider.addPoint(x, y);
+		//collider.addPoint(x, y+2);
+		collider.addPoint(x+200, y+2);
+		collider.addPoint(x+200, y-2);
+		//collider.addPoint(x, y-2);
+		colliderStart = new Polygon();
+		colliderStart.addPoint(x, y);
+		//collider.addPoint(x, y+2);
+		colliderStart.addPoint(x+200, y+2);
+		colliderStart.addPoint(x+200, y-2);
+		//collider.addPoint(x, y-2);
+	}
+	
+	public void rotateCollider(double degrees)
+	{
+		rad = degrees * (Math.PI/180.0);
+		centerx = colliderStart.xpoints[0];
+		centery = colliderStart.ypoints[0];
+		for(int i = 1; i < collider.npoints; i++)
+		{
+			int dx = colliderStart.xpoints[i] - centerx;
+			int dy = colliderStart.ypoints[i] - centery;
+			collider.xpoints[i] = (int) (centerx + dx * Math.cos(rad) - dy * Math.sin(rad));
+			collider.ypoints[i] = (int) (centery + dx * Math.sin(rad) + dy * Math.cos(rad));
+		}
+	}
+	
+	public boolean scan(ArrayList<Polygon> obstacles)
+	{
+		rotateCollider(angle);
+		boolean hit=false;
+		for(Polygon p : obstacles)
+		{
+			for(int i = 0; i <= 200; i += 40)
+			{
+				if(p.contains(centerx+i*Math.cos(rad), centery+i*Math.sin(rad)))
+				{
+					hit=true;
+				}
+			}
+		}
+		if(hit)
+		{
+			cover += 1/36.0;
+			setColliderColor(Color.red);
+		}
+		else
+			setColliderColor(Color.blue);
+			
+
+		angle += 10;
+		if(angle >= 360)
+		{
+			setColor(new Color(0,(int)(255*Math.min(1, cover*1.2)),0));
+			return true;
+		}
+		
+		return false;
+	}
+
+	public int getX()
+	{
+		return x;
+	}
+	
+	public void setX(int x)
+	{
+		this.x = x;
+	}
+	
+	public int getY()
+	{
+		return y;
+	}
+	
+	public void setY(int y)
+	{
+		this.y = y;
+	}
+	
+	public boolean addNeighbor(Waypoint w)
+	{
+		return neighbors.add(w);
+	}
+	
+	public boolean removeNeighbor(Waypoint w)
+	{
+		return neighbors.remove(w);
+	}
+
+	public ArrayList<Waypoint> getNeighbors() {
+		return neighbors;
+	}
+
+	public void setNeighbors(ArrayList<Waypoint> neighbors) {
+		this.neighbors = neighbors;
+	}
+
+	public int getRX() {
+		return rx;
+	}
+
+	public void setRX(int rx) {
+		this.rx = rx;
+	}
+
+	public int getRY() {
+		return ry;
+	}
+
+	public void setRY(int ry) {
+		this.ry = ry;
+	}
+
+	public Color getColor() {
+		return color;
+	}
+
+	public void setColor(Color color) {
+		this.color = color;
+	}
+	
+	public void setColor(int r, int b, int g) {
+		this.color = new Color(r,g,b);
+	}
+
+	public Polygon getCollider() {
+		return collider;
+	}
+
+	public void setCollider(Polygon collider) {
+		this.collider = collider;
+	}
+
+	public double getCover() {
+		return cover;
+	}
+
+	public void setCover(double cover) {
+		this.cover = cover;
+	}
+
+	public Color getColliderColor() {
+		return colliderColor;
+	}
+
+	public void setColliderColor(Color colliderColor) {
+		this.colliderColor = colliderColor;
+	}
+}
+
+		</pre>
+		
+		
+		View.java
+		<pre class="prettyprint">
+package waypointgen;
+
+import javax.swing.*;
+import java.awt.*;
+
+@SuppressWarnings("serial")
+public final class View extends JComponent 
+{
+    private final Game game;
+    private Graphics bufferGraphics; 
+    private Image offscreen;
+    private int waypointRadius;
+
+	public View(Game game)
+    {
+    	this.game = game;
+    	this.setWaypointRadius(10);
+        this.repaint();
+    }
+	
+    public void paintComponent(Graphics g) 
+    {    	
+    	if(offscreen==null)
+    	{
+    		offscreen=createImage(this.getPreferredSize().width,this.getPreferredSize().height); 
+    		setBufferGraphics(offscreen.getGraphics());
+    	}   
+    	
+    	g.setColor(Color.white);
+    	g.fillRect(0, 0, this.getPreferredSize().width,this.getPreferredSize().height);
+
+    	g.setColor(Color.gray);
+    	for(Waypoint w : game.getWaypoints())
+        	drawBackgroundWaypointLinks(w, g);
+    	
+    	for(Waypoint w : game.getWaypoints())
+        	drawBackgroundWaypoint(w, g);
+    	
+    	g.setColor(Color.black);
+    	for(Polygon p : game.getObstacles())
+        	g.fillPolygon(p);
+    	
+    	drawActiveWaypoint(game.getActiveWaypoint(), g);
+        
+        bufferGraphics.drawImage(offscreen,0,0,this);
+    }
+    
+    public Dimension getPreferredSize()
+    {
+        return new Dimension(game.getXsize(), game.getYsize());
+    }
+    
+    public void drawActiveWaypoint(Waypoint w, Graphics g)
+    {
+    	g.setColor(w.getColor());
+    	g.fillOval(w.getX()-waypointRadius*2, w.getY()-waypointRadius*2, 4*waypointRadius, 4*waypointRadius);
+    	g.setColor(w.getColliderColor());
+    	g.fillPolygon(w.getCollider());
+    }
+    
+    public void drawBackgroundWaypoint(Waypoint w, Graphics g)
+    {
+    	g.setColor(w.getColor());
+    	g.fillOval(w.getX()-waypointRadius, w.getY()-waypointRadius, 2*waypointRadius, 2*waypointRadius);
+    }
+    
+    public void drawBackgroundWaypointLinks(Waypoint w, Graphics g)
+    {
+    	for(Waypoint n : w.getNeighbors())
+    		g.drawLine(w.getX(), w.getY(), n.getX(), n.getY());
+    }
+
+    public Graphics getBufferGraphics() {
+		return bufferGraphics;
+	}
+
+	public void setBufferGraphics(Graphics bufferGraphics) {
+		this.bufferGraphics = bufferGraphics;
+	}
+	
+    public int getWaypointRadius() {
+		return waypointRadius;
+	}
+
+	public void setWaypointRadius(int waypointRadius) {
+		this.waypointRadius = waypointRadius;
+	}
+
+	public Game getGame() {
+		return game;
+	}
+}
+
+		</pre>
 	</body>
 </html>
